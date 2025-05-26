@@ -1,0 +1,11 @@
+# Ignore node modules and builds
+client/node_modules/
+client/build/
+client/.cache/
+client/.next/
+
+# System files
+.DS_Store
+
+# Environment variables
+.env
