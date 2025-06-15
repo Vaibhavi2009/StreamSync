@@ -9,15 +9,10 @@ function App() {
   const [messages, setMessages] = useState([]);
   const [isTyping, setIsTyping] = useState(false);
 
-  useEffect(() => {
-  const savedCode = localStorage.getItem("roomCode");
-  const savedToken = localStorage.getItem("roomToken");
-
-  if (savedCode && savedToken) {
-    setRoomCode(savedCode);
-  }
-}, []);
-
+  // 🔐 Authentication states
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
   const fetchMessages = useCallback(async () => {
     try {
@@ -31,36 +26,92 @@ function App() {
 
   useEffect(() => {
     if (!roomCode) return;
-    fetchMessages(); // fetch immediately
+    fetchMessages();
     const interval = setInterval(() => {
       fetchMessages();
     }, 3000);
     return () => clearInterval(interval);
   }, [roomCode, fetchMessages]);
 
-const handleCreateRoom = async () => {
+ const handleLogin = async () => {
+  if (!email.trim() || !password.trim()) {
+    alert("Please fill in both email and password.");
+    return;
+  }
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    alert("Please enter a valid email address.");
+    return;
+  }
+
   try {
-    const res = await fetch("http://localhost/streamsync/api/create_room.php");
+    const res = await fetch("http://localhost/streamsync/api/login_user.php", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
     const data = await res.json();
-
-    console.log("room_code:", data.room_code);
-    console.log("token:", data.token);
-    console.log("full data response:", data);  
-
-    if (data.room_code && data.token) {
-      setRoomCode(data.room_code);
-      localStorage.setItem("roomCode", data.room_code);
-      localStorage.setItem("roomToken", data.token);
-      alert("Room created!");
+    if (data.success) {
+      setIsLoggedIn(true);
+      setUsernameInput(data.username || "");
+      alert("Login successful");
     } else {
-      alert("Failed to create room.");
+      alert("Login failed: " + data.message);
     }
   } catch (err) {
-    console.error("Create Room Error:", err);
-    alert("Error creating room.");
+    console.error("Login error", err);
+    alert("Login request failed.");
   }
 };
 
+const handleRegister = async () => {
+  if (!email.trim() || !password.trim()) {
+    alert("Please fill in both email and password.");
+    return;
+  }
+
+  try {
+    const res = await fetch("http://localhost/streamsync/api/register_user.php", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+
+    const text = await res.text();
+    console.log("📥 Raw response from register_user.php:", text);
+    console.log("📤 Sent email:", email);
+    console.log("📤 Sent password:", password);
+
+    const data = JSON.parse(text);
+    if (data.success) {
+      alert("Registration successful. You can now log in.");
+    } else {
+      alert("Registration failed: " + data.message);
+    }
+  } catch (err) {
+    console.error("Registration error:", err.message || err);
+    alert("Registration request failed.");
+  }
+};
+
+  const handleCreateRoom = async () => {
+    try {
+      const res = await fetch("http://localhost/streamsync/api/create_room.php");
+      const data = await res.json();
+      if (data.room_code && data.token) {
+        setRoomCode(data.room_code);
+        localStorage.setItem("roomCode", data.room_code);
+        localStorage.setItem("roomToken", data.token);
+        alert("Room created!");
+      } else {
+        alert("Failed to create room.");
+      }
+    } catch (err) {
+      console.error("Create Room Error:", err);
+      alert("Error creating room.");
+    }
+  };
 
   const handleJoinRoom = async (code) => {
     if (!code.trim()) return alert("Please enter a room code.");
@@ -71,12 +122,10 @@ const handleCreateRoom = async () => {
         body: JSON.stringify({ room_code: code }),
       });
       const data = await res.json();
-      console.log("Join Room Response:", data);
-
       if (data.exists) {
         setRoomCode(code);
         localStorage.setItem("roomCode", code);
-        localStorage.setItem("roomToken", data.token);  
+        localStorage.setItem("roomToken", data.token);
         alert("Joined room!");
       } else {
         alert("Room not found.");
@@ -87,21 +136,16 @@ const handleCreateRoom = async () => {
     }
   };
 
-const handleLoadRoom = () => {
-  const savedCode = localStorage.getItem("roomCode");
-  const savedToken = localStorage.getItem("roomToken");
-
-  console.log("DEBUG - roomCode:", savedCode);
-  console.log("DEBUG - roomToken:", savedToken);
-
-  if (savedCode && savedToken) {
-    setRoomCode(savedCode);
-    alert("Previous room loaded!");
-  } else {
-    alert("No room found in storage.");
-  }
-};
-
+  const handleLoadRoom = () => {
+    const savedCode = localStorage.getItem("roomCode");
+    const savedToken = localStorage.getItem("roomToken");
+    if (savedCode && savedToken) {
+      setRoomCode(savedCode);
+      alert("Previous room loaded!");
+    } else {
+      alert("No room found in storage.");
+    }
+  };
 
   const handleLeaveRoom = () => {
     localStorage.removeItem("roomCode");
@@ -154,7 +198,37 @@ const handleLoadRoom = () => {
       />
       <h1 style={{ fontSize: "48px", color: "#00ffff", marginBottom: "30px" }}>StreamSync</h1>
 
-      {!username ? (
+      {!isLoggedIn ? (
+        <>
+          <h2>Login or Register</h2>
+          <input
+            type="text"
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            style={{ padding: "10px", marginBottom: "10px", fontSize: "16px", borderRadius: "6px" }}
+          /><br />
+          <input
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            style={{ padding: "10px", marginBottom: "10px", fontSize: "16px", borderRadius: "6px" }}
+          /><br />
+          <button
+            onClick={handleLogin}
+            style={{ marginRight: "10px", padding: "10px 20px", fontSize: "16px", backgroundColor: "#00ccff", border: "none", borderRadius: "6px", cursor: "pointer" }}
+          >
+            Login
+          </button>
+          <button
+            onClick={handleRegister}
+            style={{ padding: "10px 20px", fontSize: "16px", backgroundColor: "#00ff99", border: "none", borderRadius: "6px", cursor: "pointer" }}
+          >
+            Register
+          </button>
+        </>
+      ) : !username ? (
         <>
           <input
             type="text"
